@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- User Profile ---
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+                     && incoming().createdAt == existing().createdAt
+                     && incoming().uid == existing().uid;
+      
+      function isValidUser(data) {
+        return data.uid == request.auth.uid
+          && data.email is string && data.email.size() <= 256
+          && (!('name' in data) || data.name == null || (data.name is string && data.name.size() <= 100))
+          && (!('dob' in data) || data.dob == null || (data.dob is string && data.dob.size() <= 20))
+          && (!('identification' in data) || data.identification == null || (data.identification is string && data.identification.size() <= 200))
+          && (!('isPremium' in data) || data.isPremium == null || data.isPremium is bool)
+          && (data.onboardingComplete is bool)
+          && (!('createdAt' in data) || data.createdAt == null || data.createdAt is string);
+      }
+    }
+
+    // --- Transactions ---
+    match /transactions/{transactionId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidTransaction(incoming());
+      allow update: if isOwner(existing().userId) && isValidTransaction(incoming())
+                     && incoming().userId == existing().userId
+                     && incoming().createdAt == existing().createdAt;
+      allow delete: if isOwner(existing().userId);
+
+      function isValidTransaction(data) {
+        return data.amount is number
+          && data.type in ['debit', 'credit']
+          && data.date is timestamp
+          && data.category is string && data.category.size() <= 100
+          && (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 1000))
+          && data.source in ['sms', 'email', 'manual', 'upi', 'system']
+          && data.isInvestment is bool
+          && (!('availableBalance' in data) || data.availableBalance == null || data.availableBalance is number)
+          && (!('accountIdentifier' in data) || data.accountIdentifier == null || (data.accountIdentifier is string && data.accountIdentifier.size() <= 100))
+          && (!('accountType' in data) || data.accountType == null || data.accountType in ['asset', 'liability'])
+          && (!('rawMessage' in data) || data.rawMessage == null || (data.rawMessage is string && data.rawMessage.size() <= 5000))
+          && (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp);
+      }
+    }
+
+    // --- Reminders ---
+    match /reminders/{reminderId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidReminder(incoming());
+      allow update: if isOwner(existing().userId) && isValidReminder(incoming())
+                     && incoming().userId == existing().userId;
+      allow delete: if isOwner(existing().userId);
+
+      function isValidReminder(data) {
+        return data.type in ['credit_card', 'loan', 'utility', 'other']
+          && data.amount is number
+          && (!('description' in data) || data.description == null || (data.description is string && data.description.size() <= 1000))
+          && data.dueDate is timestamp
+          && data.isPaid is bool
+          && (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp);
+      }
+    }
+
+    // --- Goals ---
+    match /goals/{goalId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidGoal(incoming());
+      allow update: if isOwner(existing().userId) && isValidGoal(incoming());
+      allow delete: if isOwner(existing().userId);
+
+      function isValidGoal(data) {
+        return data.name is string && data.name.size() <= 200
+          && data.targetAmount is number && data.targetAmount > 0
+          && data.currentAmount is number && data.currentAmount >= 0
+          && (!('deadline' in data) || data.deadline == null || data.deadline is timestamp)
+          && (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp);
+      }
+    }
+
+    // --- Categories ---
+    match /categories/{categoryId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update, delete: if isOwner(existing().userId);
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "dob": { "type": "string" },
+        "identification": { "type": "string" },
+        "isPremium": { "type": "boolean" },
+        "onboardingComplete": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["debit", "credit"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "source": { "type": "string", "enum": ["sms", "email", "manual", "upi", "system"] },
+        "isInvestment": { "type": "boolean" },
+        "availableBalance": { "type": "number" },
+        "accountIdentifier": { "type": "string" },
+        "accountType": { "type": "string", "enum": ["asset", "liability"] },
+        "rawMessage": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "date", "type"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Bill or loan repayment reminder",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["credit_card", "loan", "utility", "other"] },
+        "amount": { "type": "number" },
+        "dueDate": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" },
+        "isPaid": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "type", "dueDate"]
+    },
+    "Goal": {
+      "title": "Goal",
+      "description": "Savings target",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "deadline": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "targetAmount"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Custom transaction category",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["expense", "investment"] },
+        "icon": { "type": "string" }
+      },
+      "required": ["userId", "name", "type"]
+    }
+  },
+  "firestore": {
+    "users": { "schema": "User", "description": "User profiles" },
+    "transactions": { "schema": "Transaction", "description": "Transaction logs" },
+    "reminders": { "schema": "Reminder", "description": "Payment reminders" },
+    "goals": { "schema": "Goal", "description": "Savings goals" },
+    "categories": { "schema": "Category", "description": "Custom categories per user" }
+  }
+}

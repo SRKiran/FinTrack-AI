@@ -1,0 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  background-color: #090D16;
+  color: #f8fafc;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+
+@layer utilities {
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .toggle-checkbox:checked {
+    right: 0;
+    border-color: #8B5CF6;
+  }
+  .toggle-checkbox:checked + .toggle-label {
+    background-color: #8B5CF6;
+  }
+  .toggle-checkbox {
+    right: 0;
+    z-index: 1;
+    border-color: #e2e8f0;
+    transition: all 0.3s;
+    transform: translateX(-100%);
+  }
+  .toggle-checkbox:checked {
+    transform: translateX(0);
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "FinTrack AI",
+  "description": "Smart AI-powered financial manager that tracks expenses, investments, and net worth by parsing transaction messages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
