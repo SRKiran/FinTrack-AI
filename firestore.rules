@@ -68,7 +68,6 @@ service cloud.firestore {
           && (!('availableBalance' in data) || data.availableBalance == null || data.availableBalance is number)
           && (!('accountIdentifier' in data) || data.accountIdentifier == null || (data.accountIdentifier is string && data.accountIdentifier.size() <= 100))
           && (!('accountType' in data) || data.accountType == null || data.accountType in ['asset', 'liability'])
-          && (!('rawMessage' in data) || data.rawMessage == null || (data.rawMessage is string && data.rawMessage.size() <= 5000))
           && (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp);
       }
     }

@@ -1,6 +1,7 @@
 export type TransactionType = 'debit' | 'credit';
 export type SourceType = 'sms' | 'email' | 'manual' | 'upi' | 'system';
 export type ReminderType = 'credit_card' | 'loan' | 'utility' | 'other';
+export type TabName = 'dashboard' | 'history' | 'analytics' | 'accounts' | 'profile';
 
 export interface UserProfile {
   uid: string;
@@ -24,7 +25,6 @@ export interface Transaction {
   source: SourceType;
   isInvestment: boolean;
   availableBalance?: number; // Parsed from message
-  rawMessage?: string;
   accountIdentifier?: string; // e.g., "HDFC xxx345"
   accountType?: 'asset' | 'liability';
   createdAt: any;
