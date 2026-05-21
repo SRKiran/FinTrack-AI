@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 import {
   IndianRupee, TrendingUp, Wallet, CreditCard,
-  DollarSign, ChevronRight, Plus, Bell,
+  ChevronRight, Plus, Bell,
 } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { motion } from 'motion/react';
@@ -202,7 +202,7 @@ const DashboardTab = memo(function DashboardTab({
                   tx.type === 'credit' ? 'bg-[#10B981]/10 text-[#10B981]' : 'bg-[#1E293B] text-[#f8fafc]'
                 )}>
                   {tx.type === 'credit'
-                    ? <DollarSign className="w-5 h-5" />
+                    ? <IndianRupee className="w-5 h-5" />
                     : <CreditCard className="w-5 h-5" />}
                 </div>
                 <div>

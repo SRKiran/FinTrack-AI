@@ -25,7 +25,8 @@ export interface Transaction {
   source: SourceType;
   isInvestment: boolean;
   availableBalance?: number; // Parsed from message
-  accountIdentifier?: string; // e.g., "HDFC xxx345"
+  accountIdentifier?: string; // e.g., "XXXX345"
+  accountName?: string; // e.g. "HDFC Bank"
   accountType?: 'asset' | 'liability';
   createdAt: any;
 }
@@ -47,4 +48,14 @@ export interface SavingsGoal {
   targetAmount: number;
   currentAmount: number;
   deadline: any;
+}
+
+export interface Account {
+  id?: string;
+  userId: string;
+  name: string;
+  type: 'asset' | 'liability';
+  /** Optional: matches accountIdentifier on transactions to link SMS data to this account */
+  identifier?: string;
+  createdAt: any;
 }

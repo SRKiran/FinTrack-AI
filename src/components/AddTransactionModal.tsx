@@ -5,9 +5,9 @@ import {
 } from 'firebase/firestore';
 import { MessageSquare, Lock, Paperclip, X } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { ai, getParserPromptWithContext } from '../lib/gemini';
+import { getParserPromptWithContext } from '../lib/gemini';
 import { handleFirestoreError, OperationType } from '../lib/firestore';
-import { Transaction, UserProfile } from '../types';
+import { Transaction, UserProfile, Account } from '../types';
 import { cn } from '../lib/utils';
 
 interface AddTransactionModalProps {
@@ -17,6 +17,7 @@ interface AddTransactionModalProps {
   profile: UserProfile;
   /** Recent transactions passed for AI context and per-account balance reconciliation */
   transactions: Transaction[];
+  accounts: Account[];
 }
 
 const CATEGORIES = [
@@ -26,7 +27,7 @@ const CATEGORIES = [
 ];
 
 export default function AddTransactionModal({
-  isOpen, onClose, userId, profile, transactions,
+  isOpen, onClose, userId, profile, transactions, accounts,
 }: AddTransactionModalProps) {
   const [mode, setMode]           = useState<'smart' | 'manual'>('smart');
   const [scanText, setScanText]   = useState('');
@@ -42,16 +43,19 @@ export default function AddTransactionModal({
   // ── Per-account balance reconciliation (fixed from global net-worth bug) ──────
   const reconcileBalance = useCallback(async (
     accountIdentifier: string,
+    accountName: string | null,
     accountType: 'asset' | 'liability' | null,
     incomingAvailableBalance: number,
     txType: 'debit' | 'credit',
     txAmount: number,
+    txDate: Date
   ) => {
     const txImpact = txType === 'credit' ? txAmount : -txAmount;
+    const txTime = txDate.getTime();
 
-    // Find the most-recent stored balance snapshot for THIS specific account
+    // Find the most-recent stored balance snapshot for THIS specific account prior to or equal to txDate
     const acctTxs = transactions
-      .filter(t => t.accountIdentifier === accountIdentifier && t.availableBalance !== undefined)
+      .filter(t => t.accountIdentifier === accountIdentifier && t.availableBalance !== undefined && t.date.toMillis() <= txTime)
       .sort((a, b) => b.date.toMillis() - a.date.toMillis());
 
     if (acctTxs.length > 0) {
@@ -64,32 +68,34 @@ export default function AddTransactionModal({
           userId,
           amount:    Math.abs(gap),
           type:      gap > 0 ? 'credit' : 'debit',
-          date:      Timestamp.fromMillis(Date.now() - 1000),
+          date:      Timestamp.fromMillis(txTime - 1000),
           description: 'Balance Adjustment (Auto)',
           category:  'Adjustment',
           source:    'system',
           isInvestment: false,
-          accountIdentifier,
-          accountType,
+          ...(accountIdentifier ? { accountIdentifier } : {}),
+          ...(accountName ? { accountName } : {}),
+          ...(accountType ? { accountType } : {}),
           availableBalance: lastKnownBalance + gap,
           createdAt: serverTimestamp(),
         });
       }
     } else {
-      // First transaction for this account — create an opening balance entry
+      // First transaction for this account prior to this date — create an opening balance entry
       const openingBalance = incomingAvailableBalance - txImpact;
       if (Math.abs(openingBalance) > 0.1) {
         await addDoc(collection(db, 'transactions'), {
           userId,
           amount:    Math.abs(openingBalance),
           type:      openingBalance > 0 ? 'credit' : 'debit',
-          date:      Timestamp.fromMillis(Date.now() - 2000),
+          date:      Timestamp.fromMillis(txTime - 2000),
           description: 'Opening Balance',
           category:  'Adjustment',
           source:    'system',
           isInvestment: false,
-          accountIdentifier,
-          accountType,
+          ...(accountIdentifier ? { accountIdentifier } : {}),
+          ...(accountName ? { accountName } : {}),
+          ...(accountType ? { accountType } : {}),
           availableBalance: Math.max(openingBalance, 0),
           createdAt: serverTimestamp(),
         });
@@ -103,17 +109,33 @@ export default function AddTransactionModal({
     setIsParsing(true);
     try {
       const prompt = getParserPromptWithContext(transactions);
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',           // Updated from gemini-3-flash-preview
-        contents: `${prompt}\n\nMessage: ${scanText}`,
-        config: { responseMimeType: 'application/json' },
+      const response = await fetch('/api/parse-sms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt, scanText }),
       });
+      if (!response.ok) {
+        throw new Error('Failed to parse SMS');
+      }
+      const result = await response.json();
 
       const data = JSON.parse(result.text || '{}');
       if (data.rejected || data.isPersonalMessage) {
         setScanText('');
         onClose();
         return;
+      }
+
+      let txDateObj = new Date();
+      let txDate = Timestamp.now();
+      if (data.transactionDate) {
+        const d = new Date(data.transactionDate);
+        if (!isNaN(d.getTime())) {
+          txDateObj = d;
+          txDate = Timestamp.fromDate(d);
+        }
       }
 
       // Per-account reconciliation (only when accountIdentifier is present)
@@ -124,10 +146,12 @@ export default function AddTransactionModal({
       ) {
         await reconcileBalance(
           data.accountIdentifier,
+          data.accountName ?? null,
           data.accountType ?? null,
           data.availableBalance,
           data.type,
           data.amount,
+          txDateObj
         );
       }
 
@@ -136,14 +160,15 @@ export default function AddTransactionModal({
         userId,
         amount:            data.amount,
         type:              data.type,
-        date:              Timestamp.now(),
+        date:              txDate,
         description:       data.description,
         category:          data.category,
         source:            'sms',
         isInvestment:      data.isInvestment,
-        availableBalance:  data.availableBalance ?? undefined,
-        accountIdentifier: data.accountIdentifier ?? undefined,
-        accountType:       data.accountType ?? undefined,
+        ...(data.availableBalance != null ? { availableBalance: data.availableBalance } : {}),
+        ...(data.accountIdentifier ? { accountIdentifier: data.accountIdentifier } : {}),
+        ...(data.accountName ? { accountName: data.accountName } : {}),
+        ...(data.accountType ? { accountType: data.accountType } : {}),
         createdAt:         serverTimestamp(),
       });
 
@@ -183,9 +208,8 @@ export default function AddTransactionModal({
         category:          manualForm.category,
         source:            'manual',
         isInvestment:      manualForm.isInvestment,
-        availableBalance:  manualForm.balance ? Number(manualForm.balance) : undefined,
-        accountIdentifier: manualForm.accountIdentifier || undefined,
-        accountType:       manualForm.accountIdentifier ? manualForm.accountType : undefined,
+        ...(manualForm.balance ? { availableBalance: Number(manualForm.balance) } : {}),
+        ...(manualForm.accountIdentifier ? { accountIdentifier: manualForm.accountIdentifier, accountType: manualForm.accountType } : {}),
         createdAt:         serverTimestamp(),
       });
       setManualForm({
@@ -267,8 +291,13 @@ export default function AddTransactionModal({
                 <textarea
                   value={scanText}
                   onChange={e => setScanText(e.target.value)}
+                  disabled={isParsing}
+                  readOnly={!profile.isPremium || isParsing}
                   placeholder="e.g. HDFC Bank: Rs 500 debited for Zomato on 07-May..."
-                  className="w-full h-40 p-4 bg-[#090D16] border border-[#1E293B] text-[#f8fafc] placeholder-[#64748b] rounded-[24px] outline-none focus:ring-2 focus:ring-[#8B5CF6] text-sm resize-none"
+                  className={cn(
+                    "w-full h-40 p-4 bg-[#090D16] border border-[#1E293B] text-[#f8fafc] placeholder-[#64748b] rounded-[24px] outline-none focus:ring-2 focus:ring-[#8B5CF6] text-sm resize-none",
+                    isParsing && "opacity-50 cursor-not-allowed"
+                  )}
                 />
                 <div className="absolute top-4 right-4 flex items-center gap-2">
                   {/* ── PDF Attachment (Premium) ── */}
@@ -382,6 +411,29 @@ export default function AddTransactionModal({
               >
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
+
+              {/* Named account quick-pick (shown when user has saved accounts) */}
+              {accounts.length > 0 && (
+                <select
+                  defaultValue=""
+                  onChange={e => {
+                    const acc = accounts.find(a => a.id === e.target.value);
+                    if (acc) setManualForm(f => ({
+                      ...f,
+                      accountIdentifier: acc.identifier ?? acc.name,
+                      accountType: acc.type,
+                    }));
+                  }}
+                  className="w-full p-4 bg-[#090D16] border border-[#06B6D4]/40 rounded-[24px] text-sm outline-none focus:ring-2 focus:ring-[#06B6D4] text-[#f8fafc]"
+                >
+                  <option value="" disabled>Pick a saved account…</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id!}>
+                      {a.name}{a.identifier ? ` · ${a.identifier}` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
 
               <div className="grid grid-cols-2 gap-3">
                 <input

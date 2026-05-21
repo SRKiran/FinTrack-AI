@@ -114,5 +114,22 @@ service cloud.firestore {
       allow create: if isSignedIn() && incoming().userId == request.auth.uid;
       allow update, delete: if isOwner(existing().userId);
     }
+
+    // --- Accounts ---
+    match /accounts/{accountId} {
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidAccount(incoming());
+      allow update: if isOwner(existing().userId) && isValidAccount(incoming())
+                     && incoming().userId == existing().userId;
+      allow delete: if isOwner(existing().userId);
+
+      function isValidAccount(data) {
+        return data.name is string && data.name.size() <= 200
+          && data.type in ['asset', 'liability']
+          && (!('identifier' in data) || data.identifier == null || (data.identifier is string && data.identifier.size() <= 100))
+          && (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp);
+      }
+    }
   }
 }

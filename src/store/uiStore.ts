@@ -8,6 +8,8 @@ interface UIState {
   isGoalOpen: boolean;
   isReminderOpen: boolean;
   isNotifOpen: boolean;
+  isOnboardingOpen: boolean;
+  isAddAccountOpen: boolean;
 
   setActiveTab: (tab: TabName) => void;
   setFilterAccount: (acc: string | null) => void;
@@ -19,15 +21,21 @@ interface UIState {
   closeReminder: () => void;
   toggleNotif: () => void;
   closeNotif: () => void;
+  openOnboarding: () => void;
+  closeOnboarding: () => void;
+  openAddAccount: () => void;
+  closeAddAccount: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
-  activeTab:      'dashboard',
-  filterAccount:  null,
-  isAddTxOpen:    false,
-  isGoalOpen:     false,
-  isReminderOpen: false,
-  isNotifOpen:    false,
+  activeTab:        'dashboard',
+  filterAccount:    null,
+  isAddTxOpen:      false,
+  isGoalOpen:       false,
+  isReminderOpen:   false,
+  isNotifOpen:      false,
+  isOnboardingOpen: false,
+  isAddAccountOpen: false,
 
   setActiveTab:     (tab) => set({ activeTab: tab }),
   setFilterAccount: (acc) => set({ filterAccount: acc }),
@@ -39,4 +47,8 @@ export const useUIStore = create<UIState>((set) => ({
   closeReminder:    () => set({ isReminderOpen: false }),
   toggleNotif:      () => set((s) => ({ isNotifOpen: !s.isNotifOpen })),
   closeNotif:       () => set({ isNotifOpen: false }),
+  openOnboarding:   () => set({ isOnboardingOpen: true }),
+  closeOnboarding:  () => set({ isOnboardingOpen: false }),
+  openAddAccount:   () => set({ isAddAccountOpen: true }),
+  closeAddAccount:  () => set({ isAddAccountOpen: false }),
 }));

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -19,12 +19,14 @@ import { UserProfile, TabName } from './types';
 import { useTransactions } from './hooks/useTransactions';
 import { useReminders } from './hooks/useReminders';
 import { useGoals } from './hooks/useGoals';
+import { useAccounts } from './hooks/useAccounts';
 import { useUIStore } from './store/uiStore';
 import { useProfileStore } from './store/profileStore';
 import NavButton from './components/NavButton';
 import AuthScreen from './components/AuthScreen';
 import OnboardingScreen from './components/OnboardingScreen';
 import AddTransactionModal from './components/AddTransactionModal';
+import AddAccountModal from './components/AddAccountModal';
 import AddGoalModal from './components/AddGoalModal';
 import AddReminderModal from './components/AddReminderModal';
 import NotificationPanel from './components/NotificationPanel';
@@ -60,11 +62,14 @@ export default function App() {
     isReminderOpen, closeReminder,
     isNotifOpen, toggleNotif, closeNotif,
     openAddTx, openGoal, openReminder,
+    isOnboardingOpen, openOnboarding, closeOnboarding,
+    isAddAccountOpen, openAddAccount, closeAddAccount,
   } = useUIStore();
 
   const { transactions, loadingMore, hasMore, loadMore } = useTransactions(user?.uid ?? null);
   const { reminders, toggleReminder, addReminder }       = useReminders(user?.uid ?? null);
   const { goals, addGoal }                               = useGoals(user?.uid ?? null);
+  const { accounts, addAccount, deleteAccount }          = useAccounts(user?.uid ?? null);
 
   const totals = useMemo(() => transactions.reduce(
     (acc, tx) => {
@@ -86,7 +91,20 @@ export default function App() {
       setUser(u);
       if (u) {
         const snap = await getDoc(doc(db, 'users', u.uid));
-        useProfileStore.getState().setProfile(snap.exists() ? (snap.data() as UserProfile) : null);
+        if (snap.exists()) {
+          useProfileStore.getState().setProfile(snap.data() as UserProfile);
+        } else {
+          // Auto-create minimal profile for new users (soft onboarding)
+          const newProfile: UserProfile = {
+            uid:                u.uid,
+            email:              u.email ?? '',
+            name:               u.displayName ?? undefined,
+            onboardingComplete: false,
+            createdAt:          new Date().toISOString(),
+          };
+          await setDoc(doc(db, 'users', u.uid), newProfile);
+          useProfileStore.getState().setProfile(newProfile);
+        }
       } else {
         useProfileStore.getState().setProfile(null);
       }
@@ -110,10 +128,11 @@ export default function App() {
       dob:                formData.dob,
       identification:     formData.identification,
       onboardingComplete: true,
-      createdAt:          new Date().toISOString(),
+      createdAt:          profile?.createdAt ?? new Date().toISOString(),
     };
     await setDoc(doc(db, 'users', user.uid), newProfile);
     setProfile(newProfile);
+    closeOnboarding();
   };
 
   const handleProfileUpdate = async (patch: Partial<UserProfile>) => {
@@ -137,9 +156,8 @@ export default function App() {
     </div>
   );
 
-  if (!user)                              return <AuthScreen onLogin={handleLogin} />;
-  if (!profile || !profile.onboardingComplete)
-    return <OnboardingScreen onSubmit={handleOnboarding} />;
+  if (!user) return <AuthScreen onLogin={handleLogin} />;
+  if (!profile) return null; // briefly while auto-creating profile
 
   return (
     <div className="flex flex-col h-screen bg-[#090D16] max-w-md mx-auto relative overflow-hidden border-x border-[#1E293B] text-[#f8fafc]">
@@ -158,6 +176,19 @@ export default function App() {
           )}
         </button>
       </header>
+
+      {/* Setup banner — shown when profile not yet complete */}
+      {!profile.onboardingComplete && (
+        <div className="bg-[#06B6D4]/10 border-b border-[#06B6D4]/20 px-4 py-2 flex items-center justify-between shrink-0">
+          <span className="text-xs text-[#06B6D4]">Complete your profile for full features</span>
+          <button
+            onClick={openOnboarding}
+            className="text-xs font-bold text-[#06B6D4] hover:underline"
+          >
+            Setup →
+          </button>
+        </div>
+      )}
 
       <NotificationPanel
         isOpen={isNotifOpen}
@@ -206,6 +237,9 @@ export default function App() {
               <AccountsTab
                 key="accounts"
                 transactions={transactions}
+                accounts={accounts}
+                onAddAccount={openAddAccount}
+                onDeleteAccount={async (id) => { await deleteAccount(id); }}
                 onNavigate={handleAccountsNavigate}
               />
             )}
@@ -243,6 +277,7 @@ export default function App() {
         userId={user.uid}
         profile={profile}
         transactions={transactions}
+        accounts={accounts}
       />
       <AddGoalModal
         isOpen={isGoalOpen}
@@ -254,6 +289,18 @@ export default function App() {
         onClose={closeReminder}
         onAdd={async (data) => { await addReminder(data); }}
       />
+      <AddAccountModal
+        isOpen={isAddAccountOpen}
+        onClose={closeAddAccount}
+        onAdd={async (data) => { await addAccount(data); }}
+      />
+
+      {/* Onboarding overlay (soft — can be dismissed via X when auto-created) */}
+      {isOnboardingOpen && (
+        <div className="fixed inset-0 z-[200] bg-[#090D16] overflow-auto">
+          <OnboardingScreen onSubmit={handleOnboarding} onCancel={closeOnboarding} />
+        </div>
+      )}
     </div>
   );
 }

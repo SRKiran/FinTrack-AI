@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 
 interface OnboardingScreenProps {
   onSubmit: (data: { name: string; dob: string; identification: string }) => void;
+  onCancel?: () => void;
 }
 
 // PAN card format: 5 uppercase letters + 4 digits + 1 uppercase letter (e.g., ABCDE1234F)
@@ -34,7 +35,7 @@ async function verifyPANWithSetu(pan: string): Promise<{ valid: boolean; name?: 
 }
 */
 
-export default function OnboardingScreen({ onSubmit }: OnboardingScreenProps) {
+export default function OnboardingScreen({ onSubmit, onCancel }: OnboardingScreenProps) {
   const [step, setStep]       = useState(1);
   const [formData, setFormData] = useState({ name: '', dob: '', identification: '' });
   const [panError, setPanError] = useState('');
@@ -68,7 +69,16 @@ export default function OnboardingScreen({ onSubmit }: OnboardingScreenProps) {
   const isNextDisabled = step === 1 && !formData.name.trim();
 
   return (
-    <div className="flex h-screen flex-col bg-[#090D16] p-8 max-w-md mx-auto text-[#f8fafc]">
+    <div className="relative flex h-screen flex-col bg-[#090D16] p-8 max-w-md mx-auto text-[#f8fafc]">
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="absolute top-4 right-4 p-2 text-[#64748b] hover:text-[#f8fafc] transition-colors z-10"
+          aria-label="Close"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
       {/* Progress bar */}
       <div className="flex gap-2 mb-12">
         {[1, 2, 3].map(i => (
