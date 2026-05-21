@@ -18,7 +18,7 @@ const AnalyticsTab = memo(function AnalyticsTab({ transactions, totals }: Analyt
   const spendingCategories = useMemo(() => {
     const map: Record<string, number> = {};
     transactions.forEach(tx => {
-      if (tx.type === 'debit' && tx.category !== 'Investment') {
+      if (tx.type === 'debit' && tx.source !== 'system' && tx.category !== 'Investment') {
         map[tx.category] = (map[tx.category] ?? 0) + tx.amount;
       }
     });

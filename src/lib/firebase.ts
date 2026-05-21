@@ -19,10 +19,16 @@ if (import.meta.env.DEV) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 }
-initializeAppCheck(app, {
-  provider: new ReCaptchaV3Provider(import.meta.env.VITE_RECAPTCHA_SITE_KEY ?? ''),
-  isTokenAutoRefreshEnabled: true,
-});
+
+const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+if (recaptchaSiteKey) {
+  initializeAppCheck(app, {
+    provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+} else {
+  console.warn('VITE_RECAPTCHA_SITE_KEY is missing. App Check is disabled. Add it to .env to enable App Check.');
+}
 
 // Using initializeFirestore with persistentLocalCache — replaces deprecated enableIndexedDbPersistence.
 // persistentMultipleTabManager allows offline persistence across multiple browser tabs simultaneously.

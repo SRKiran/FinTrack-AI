@@ -20,7 +20,7 @@ interface AddTransactionModalProps {
 }
 
 const CATEGORIES = [
-  'Food', 'Shopping', 'Transport', 'Entertainment', 'Utilities',
+  'Food', 'Groceries', 'Shopping', 'Transport', 'Entertainment', 'Utilities',
   'Rent', 'Salary', 'Investment', 'Loan Payment', 'Mutual Fund',
   'Petrol', 'Restaurant', 'Other',
 ];
