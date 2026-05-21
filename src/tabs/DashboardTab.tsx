@@ -24,9 +24,8 @@ const DashboardTab = memo(function DashboardTab({
   transactions, reminders, goals, totals, netWorth,
   onReminderPaid, onNavigate, onAddGoal, onAddReminder,
 }: DashboardTabProps) {
-  const recent = [...transactions]
-    .sort((a, b) => b.date.toMillis() - a.date.toMillis())
-    .slice(0, 5);
+  // Transactions arrive already sorted desc by date from the Firestore query
+  const recent = transactions.slice(0, 5);
 
   return (
     <motion.div

@@ -82,9 +82,40 @@ export default function App() {
     { income: 0, expenses: 0, investments: 0 }
   ), [transactions]);
 
-  const netWorth = useMemo(() =>
-    transactions.reduce((sum, tx) => sum + (tx.type === 'credit' ? tx.amount : -tx.amount), 0),
-  [transactions]);
+  // Effective balance: per-account, use last SMS-reported balance and adjust
+  // for any transactions that arrived after it (which may not include a balance).
+  // Two O(n) passes — no nested filter/reduce per account key.
+  const netWorth = useMemo(() => {
+    // Pass 1: find latest availableBalance + accumulate fallback (credits − debits) per account
+    const info = new Map<string, { bal: number | null; cutoff: number; adj: number; fallback: number }>();
+    transactions.forEach(tx => {
+      if (tx.source === 'system' || !tx.accountIdentifier) return;
+      const key = tx.accountIdentifier;
+      if (!info.has(key)) info.set(key, { bal: null, cutoff: 0, adj: 0, fallback: 0 });
+      const e = info.get(key)!;
+      const t = tx.date.toMillis();
+      if (tx.availableBalance != null && t >= e.cutoff) { e.bal = tx.availableBalance; e.cutoff = t; }
+      e.fallback += tx.type === 'credit' ? tx.amount : -tx.amount;
+    });
+
+    // Pass 2: accumulate adjustments for transactions after each account's balance cutoff
+    transactions.forEach(tx => {
+      if (tx.source === 'system' || !tx.accountIdentifier) return;
+      const e = info.get(tx.accountIdentifier);
+      if (!e || e.bal === null) return;
+      if (tx.date.toMillis() > e.cutoff)
+        e.adj += tx.type === 'credit' ? tx.amount : -tx.amount;
+    });
+
+    let total = 0;
+    info.forEach(e => { total += e.bal !== null ? e.bal + e.adj : e.fallback; });
+    // Transactions without an accountIdentifier (manual entries with no account set)
+    transactions.forEach(tx => {
+      if (!tx.accountIdentifier && tx.source !== 'system')
+        total += tx.type === 'credit' ? tx.amount : -tx.amount;
+    });
+    return total;
+  }, [transactions]);
 
   useEffect(() => {
     return onAuthStateChanged(auth, async u => {
@@ -198,7 +229,7 @@ export default function App() {
         onAddReminder={() => { openReminder(); closeNotif(); }}
       />
 
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main className="flex-1 overflow-y-auto pb-48">
         <AnimatePresence mode="wait">
           <Suspense fallback={<TabFallback />}>
             {activeTab === 'dashboard' && (
@@ -256,12 +287,14 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      <button
-        onClick={openAddTx}
-        className="absolute bottom-28 right-6 w-14 h-14 bg-[#06B6D4] rounded-full flex items-center justify-center text-[#090D16] shadow-xl shadow-[#06B6D4]/20 z-40 active:scale-95 transition-transform"
-      >
-        <Plus className="w-7 h-7" />
-      </button>
+      {activeTab !== 'analytics' && activeTab !== 'profile' && (
+        <button
+          onClick={openAddTx}
+          className="absolute bottom-28 right-6 w-14 h-14 bg-[#06B6D4] rounded-full flex items-center justify-center text-[#090D16] shadow-xl shadow-[#06B6D4]/20 z-40 active:scale-95 transition-transform"
+        >
+          <Plus className="w-7 h-7" />
+        </button>
+      )}
 
       <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-[#090D16] border-t border-[#1E293B] px-4 py-4 flex justify-between items-center z-50">
         <NavButton active={activeTab === 'dashboard'} icon={LayoutDashboard} label="Home"     onClick={() => setActiveTab('dashboard')} />

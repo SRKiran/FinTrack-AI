@@ -30,21 +30,19 @@ const AnalyticsTab = memo(function AnalyticsTab({ transactions, totals }: Analyt
 
   const monthlyData = useMemo(() => {
     const now = new Date();
-    const months: { label: string; income: number; expenses: number }[] = [];
+    // Keyed map avoids O(n×6) Array.find() inside the transaction loop
+    const mapByKey = new Map<string, { label: string; income: number; expenses: number }>();
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const label = format(d, 'MMM');
-      const key = format(d, 'yyyy-MM');
-      months.push({ label, income: 0, expenses: 0, _key: key } as typeof months[0] & { _key: string });
+      mapByKey.set(format(d, 'yyyy-MM'), { label: format(d, 'MMM'), income: 0, expenses: 0 });
     }
     transactions.forEach(tx => {
-      const key = format(tx.date.toDate(), 'yyyy-MM');
-      const entry = (months as Array<typeof months[0] & { _key: string }>).find(m => m._key === key);
+      const entry = mapByKey.get(format(tx.date.toDate(), 'yyyy-MM'));
       if (!entry) return;
-      if (tx.type === 'credit') entry.income  += tx.amount;
+      if (tx.type === 'credit') entry.income   += tx.amount;
       if (tx.type === 'debit')  entry.expenses += tx.amount;
     });
-    return (months as Array<typeof months[0] & { _key: string }>).map(({ _key, ...rest }) => rest);
+    return [...mapByKey.values()];
   }, [transactions]);
 
   const savingsRate = totals.income > 0

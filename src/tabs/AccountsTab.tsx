@@ -14,14 +14,15 @@ interface AccountsTabProps {
 }
 
 interface TxStats {
-  identifier:    string;
-  accountName:   string | null;
-  latestBalance: number | null;
+  identifier:        string;
+  accountName:       string | null;
+  latestBalance:     number | null;   // last SMS-reported balance (raw)
   latestBalanceDate: Date | null;
-  totalCredit:   number;
-  totalDebit:    number;
-  lastActivity:  Date;
-  txCount:       number;
+  effectiveBalance:  number | null;   // latestBalance adjusted for subsequent txs
+  totalCredit:       number;
+  totalDebit:        number;
+  lastActivity:      Date;
+  txCount:           number;
 }
 
 const AccountsTab = memo(function AccountsTab({
@@ -30,12 +31,15 @@ const AccountsTab = memo(function AccountsTab({
   // Build transaction stats map keyed by accountIdentifier
   const txStatsMap = useMemo(() => {
     const map = new Map<string, TxStats>();
+
+    // ── Pass 1: accumulate totals and find the latest reported balance ──
     transactions.forEach(tx => {
       if (!tx.accountIdentifier) return;
       const key = tx.accountIdentifier;
       if (!map.has(key)) {
         map.set(key, {
-          identifier: key, accountName: tx.accountName ?? null, latestBalance: null, latestBalanceDate: null,
+          identifier: key, accountName: tx.accountName ?? null,
+          latestBalance: null, latestBalanceDate: null, effectiveBalance: null,
           totalCredit: 0, totalDebit: 0,
           lastActivity: tx.date.toDate(), txCount: 0,
         });
@@ -44,9 +48,9 @@ const AccountsTab = memo(function AccountsTab({
       if (tx.accountName && !s.accountName) s.accountName = tx.accountName;
       if (tx.type === 'credit') s.totalCredit += tx.amount;
       if (tx.type === 'debit')  s.totalDebit  += tx.amount;
-      
+
       const d = tx.date.toDate();
-      if (tx.availableBalance !== undefined) {
+      if (tx.availableBalance != null) {
         if (!s.latestBalanceDate || d.getTime() >= s.latestBalanceDate.getTime()) {
           s.latestBalance = tx.availableBalance;
           s.latestBalanceDate = d;
@@ -55,6 +59,28 @@ const AccountsTab = memo(function AccountsTab({
       if (d.getTime() > s.lastActivity.getTime()) s.lastActivity = d;
       s.txCount += 1;
     });
+
+    // ── Pass 2 (O(n)): accumulate per-account adjustments for transactions after each balance cutoff ──
+    // Using a separate Map avoids re-filtering the full transactions array for each account key.
+    const adjustments = new Map<string, number>();
+    transactions.forEach(tx => {
+      if (!tx.accountIdentifier) return;
+      const s = map.get(tx.accountIdentifier);
+      if (!s || s.latestBalanceDate === null) return;
+      if (tx.date.toDate().getTime() > s.latestBalanceDate.getTime()) {
+        adjustments.set(
+          tx.accountIdentifier,
+          (adjustments.get(tx.accountIdentifier) ?? 0) + (tx.type === 'credit' ? tx.amount : -tx.amount)
+        );
+      }
+    });
+
+    map.forEach((s, key) => {
+      s.effectiveBalance = s.latestBalance !== null
+        ? s.latestBalance + (adjustments.get(key) ?? 0)
+        : s.totalCredit - s.totalDebit;
+    });
+
     return map;
   }, [transactions]);
 
@@ -95,15 +121,7 @@ const AccountsTab = memo(function AccountsTab({
           </button>
         </div>
 
-        {accounts.length === 0 ? (
-          <button
-            onClick={onAddAccount}
-            className="w-full border-2 border-dashed border-[#1E293B] rounded-[24px] py-6 text-center text-[#64748b] text-xs hover:border-[#06B6D4]/40 hover:text-[#06B6D4] transition-colors"
-          >
-            <Building2 className="w-5 h-5 mx-auto mb-2 opacity-50" />
-            Create your first account
-          </button>
-        ) : (
+        {accounts.length > 0 ? (
           <div className="space-y-3">
             {accounts.map(acc => {
               const stats = acc.identifier ? txStatsMap.get(acc.identifier) : undefined;
@@ -118,7 +136,16 @@ const AccountsTab = memo(function AccountsTab({
               );
             })}
           </div>
-        )}
+        ) : autoDetected.length === 0 ? (
+          // Only show the placeholder when there are truly no accounts anywhere
+          <button
+            onClick={onAddAccount}
+            className="w-full border-2 border-dashed border-[#1E293B] rounded-[24px] py-6 text-center text-[#64748b] text-xs hover:border-[#06B6D4]/40 hover:text-[#06B6D4] transition-colors"
+          >
+            <Building2 className="w-5 h-5 mx-auto mb-2 opacity-50" />
+            Create your first account
+          </button>
+        ) : null}
       </section>
 
       {/* ── Auto-detected from SMS ── */}
@@ -132,7 +159,7 @@ const AccountsTab = memo(function AccountsTab({
               <AccountCard
                 key={s.identifier}
                 stats={s}
-                isLiability={(s.latestBalance ?? 0) < 0}
+                isLiability={(s.effectiveBalance ?? 0) < 0}
                 onNavigate={onNavigate}
               />
             ))}
@@ -185,9 +212,9 @@ function NamedAccountCard({
       </button>
 
       <div className="flex items-center gap-3 shrink-0">
-        {stats?.latestBalance !== undefined && stats.latestBalance !== null ? (
+        {stats?.effectiveBalance !== undefined && stats.effectiveBalance !== null ? (
           <p className={cn('font-bold text-sm', isLiability ? 'text-[#F43F5E]' : 'text-[#10B981]')}>
-            ₹{Math.abs(stats.latestBalance).toLocaleString('en-IN')}
+            ₹{Math.abs(stats.effectiveBalance).toLocaleString('en-IN')}
           </p>
         ) : (
           <span className={cn(
@@ -237,9 +264,9 @@ function AccountCard({
       </div>
       <div className="flex items-center gap-2">
         <div className="text-right">
-          {stats.latestBalance !== null ? (
+          {stats.effectiveBalance !== null ? (
             <p className="font-bold text-sm" style={{ color: balanceColor }}>
-              ₹{Math.abs(stats.latestBalance).toLocaleString('en-IN')}
+              ₹{Math.abs(stats.effectiveBalance).toLocaleString('en-IN')}
             </p>
           ) : (
             <p className="text-xs text-[#64748b]">No balance</p>
